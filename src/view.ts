@@ -1,4 +1,6 @@
 import { TextFileView, WorkspaceLeaf, Menu, Modal, App, Setting, Notice, MarkdownRenderer, normalizePath, TFile, Component } from 'obsidian';
+import { WorkItemDetailModal, collectChildren } from './DetailModal';
+import { parseCard, resolveWorkItem, stateTone, typeGlyph } from './workitem';
 import { KanbanBoard, moveCard, updateCard, duplicateCard, KanbanLane, KanbanCard } from './types';
 import { MarkdownParser } from './parser';
 import KanbanPlugin from './main';
@@ -706,99 +708,17 @@ export class KanbanView extends TextFileView {
                     displayContent = displayContent.replace(/#[^\s#]+/g, '').replace(/\s{2,}/g, ' ').trim();
                 }
 
-                // Always render with native checkbox handling
-                const contentContainer = cardEl.createDiv({ cls: 'kanban-card-content kanban-card-native-checkboxes' });
-                void MarkdownRenderer.render(this.app, displayContent, contentContainer, this.file?.path || "", this)
-                    .then(() => {
-                        // Add event listeners to rendered checkboxes to update the card content
-                        const checkboxes = contentContainer.querySelectorAll('input[type="checkbox"].task-list-item-checkbox');
-                        checkboxes.forEach((cb: HTMLInputElement, index) => {
-                            cb.addEventListener('change', (e) => {
-                                e.stopPropagation();
+                const sourcePath = this.file?.path || "";
+                const parsed = parseCard(displayContent);
+                const primary = resolveWorkItem(this.app, parsed.primary, sourcePath);
 
-                                // Simple string replacement: find the nth instance of `- [ ]` or `- [x]`
-                                let matchCount = -1;
-                                const newMark = cb.checked ? 'x' : ' ';
-                                const newContent = card.content.replace(/- \[(x| )\]/ig, (match) => {
-                                    matchCount++;
-                                    if (matchCount === index) {
-                                        return `- [${newMark}]`;
-                                    }
-                                    return match;
-                                });
-
-                                if (this.board && newContent !== card.content) {
-                                    this.updateBoard(updateCard({ ...this.board }, card.id, newContent));
-                                }
-                            });
-                        });
-                    });
-
-                // Render optional Priority and Date below content, right-aligned
-                if (card.priority || card.date) {
-                    const metaContainer = cardEl.createDiv({ cls: 'kanban-card-meta-container', attr: { style: 'display: flex; justify-content: flex-end; align-items: center; gap: 8px;' } });
-                    
-                    if (card.priority && this.board?.settings?.priorities) {
-                        const pDef = this.board.settings.priorities.find(p => p.name === card.priority);
-                        if (pDef) {
-                            metaContainer.createSpan({
-                                cls: 'kanban-priority-badge',
-                                text: pDef.name,
-                                attr: { style: `background-color: ${pDef.color}; color: ${this.getContrastYIQ(pDef.color)}; padding: 2px 6px; border-radius: 10px; font-size: 0.75em; font-weight: bold; display: inline-block; line-height: 1;` }
-                            });
-                        }
-                    }
-
-                    if (card.date) {
-                        const dateContainer = metaContainer.createDiv({ cls: 'kanban-card-date', attr: { style: 'font-size: 0.85em; opacity: 0.8; line-height: 1;' } });
-                        dateContainer.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            this.showDatePicker(card);
-                        });
-                        
-                        let dateText = card.date;
-                        if (this.plugin.settings.showRelativeDate) {
-                            const m = window.moment(card.date, 'YYYY-MM-DD');
-                            if (m.isValid()) {
-                                dateText = m.fromNow();
-                            }
-                        }
-                        
-                        if (this.plugin.settings.linkDateToDailyNote) {
-                            const link = dateContainer.createEl('a', {
-                                cls: 'internal-link kanban-card-date-link',
-                                text: dateText,
-                                attr: { 'data-href': card.date }
-                            });
-                            link.addEventListener('click', (e) => {
-                                e.stopPropagation();
-                                void this.app.workspace.openLinkText(card.date!, this.file?.path || "", e.ctrlKey || e.metaKey || e.button === 1);                            });
-                        } else {
-                            dateContainer.createSpan({ text: dateText });
-                        }
-                    }
-                }
-
-                if (this.plugin.settings.showLinkedPageMetadata) {
-                    const linkMatch = displayContent.match(/\[\[([^\]|]+)(?:\|.*)?\]\]/);
-                    if (linkMatch) {
-                        const linkText = linkMatch[1] as string;
-                        const destFile = this.app.metadataCache.getFirstLinkpathDest(linkText, this.file?.path || "");
-                        if (destFile) {
-                            const cache = this.app.metadataCache.getFileCache(destFile);
-                            if (cache && cache.frontmatter) {
-                                const metaEntries = Object.entries(cache.frontmatter)
-                                    .filter(([k, v]) => k !== 'position' && v !== null && v !== undefined);
-
-                                if (metaEntries.length > 0) {
-                                    const metaContainer = cardEl.createDiv({ cls: 'kanban-card-metadata', attr: { style: 'font-size: 0.8em; opacity: 0.7; margin-top: 5px; background: var(--background-secondary-alt); padding: 4px; border-radius: 4px;' } });
-                                    metaEntries.forEach(([k, v]) => {
-                                        metaContainer.createDiv({ text: `${k}: ${v}` });
-                                    });
-                                }
-                            }
-                        }
-                    }
+                if (primary && primary.file) {
+                    const children = collectChildren(this.app, parsed.children, sourcePath);
+                    cardEl.addClass('kanban-card-jira');
+                    this.renderJiraCard(cardEl, primary, children, sourcePath);
+                } else {
+                    const contentContainer = cardEl.createDiv({ cls: 'kanban-card-content kanban-card-native-checkboxes' });
+                    void MarkdownRenderer.render(this.app, displayContent, contentContainer, sourcePath, this);
                 }
             }
         });
@@ -828,6 +748,86 @@ export class KanbanView extends TextFileView {
                 }
             });
         }
+    }
+
+    /** Jira-style card: title, epic chip, labels, work items, footer. */
+    private renderJiraCard(cardEl: HTMLElement, item: import('./workitem').WorkItem,
+                           children: import('./workitem').WorkItem[], sourcePath: string) {
+        if (item.epic) {
+            cardEl.createDiv({ cls: 'kanban-jira-epic' }).createSpan({ text: item.epic });
+        }
+
+        cardEl.createDiv({ cls: 'kanban-jira-title', text: item.title });
+
+        if (item.labels.length) {
+            const labels = cardEl.createDiv({ cls: 'kanban-jira-labels' });
+            for (const l of item.labels.slice(0, 4)) {
+                labels.createSpan({ cls: 'kanban-chip', text: l });
+            }
+            if (item.labels.length > 4) {
+                labels.createSpan({ cls: 'kanban-chip is-more', text: `+${item.labels.length - 4}` });
+            }
+        }
+
+        if (children.length) {
+            const done = children.filter((c) => stateTone(c.state) === 'done').length;
+            const wrap = cardEl.createDiv({ cls: 'kanban-jira-workitems' });
+            const head = wrap.createDiv({ cls: 'kanban-jira-workitems-head' });
+            head.createSpan({ cls: 'kanban-jira-wi-caret', text: '▾' });
+            head.createSpan({ text: `Work items ${done}/${children.length}` });
+
+            const list = wrap.createDiv({ cls: 'kanban-jira-wi-list' });
+            const draw = () => {
+                list.empty();
+                for (const c of children) {
+                    const row = list.createDiv({ cls: 'kanban-jira-wi' });
+                    row.createSpan({ cls: 'kanban-wi-glyph', text: typeGlyph(c.type) });
+                    row.createSpan({ cls: 'kanban-wi-key', text: c.id });
+                    row.createSpan({ cls: 'kanban-wi-title', text: c.title });
+                    if (c.state) {
+                        row.createSpan({ cls: `kanban-wi-state is-${stateTone(c.state)}`, text: c.state });
+                    }
+                    row.createSpan({
+                        cls: c.initials ? 'kanban-wi-avatar' : 'kanban-wi-avatar is-empty',
+                        text: c.initials,
+                        attr: { 'aria-label': c.assignee || 'Unassigned' },
+                    });
+                    row.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        void this.app.workspace.openLinkText(c.link, sourcePath, true);
+                    });
+                }
+            };
+            draw();
+
+            head.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const collapsed = wrap.hasClass('is-collapsed');
+                wrap.toggleClass('is-collapsed', !collapsed);
+                head.firstElementChild?.setText(collapsed ? '▾' : '▸');
+            });
+        }
+
+        const foot = cardEl.createDiv({ cls: 'kanban-jira-foot' });
+        foot.createSpan({ cls: `kanban-wi-glyph is-${item.type.toLowerCase()}`, text: typeGlyph(item.type) });
+        foot.createSpan({ cls: 'kanban-wi-key', text: item.id });
+        if (item.state) {
+            foot.createSpan({ cls: `kanban-wi-state is-${stateTone(item.state)}`, text: item.state });
+        }
+        const right = foot.createDiv({ cls: 'kanban-jira-foot-right' });
+        if (item.points) right.createSpan({ cls: 'kanban-jira-points', text: item.points });
+        right.createSpan({
+            cls: item.initials ? 'kanban-wi-avatar' : 'kanban-wi-avatar is-empty',
+            text: item.initials,
+            attr: { 'aria-label': item.assignee || 'Unassigned' },
+        });
+
+        cardEl.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('.kanban-jira-wi') || target.closest('.kanban-jira-workitems-head')) return;
+            e.stopPropagation();
+            new WorkItemDetailModal(this.app, item, children, sourcePath, this).open();
+        }, true);
     }
 
     private getPriorityRank(priorityName?: string): number {

@@ -1,11 +1,11 @@
 {
   "id": "kanban",
-  "name": "Kanban Board",
-  "version": "0.2.2",
+  "name": "Kanban Board (Jira)",
+  "version": "0.15.0",
   "minAppVersion": "1.12.0",
   "description": "A modern, feature-rich Kanban board.",
   "author": "Komail Kanjee",
-  "authorUrl": "https://github.com/komailo",
+  "authorUrl": "https://github.com/wizlif/obsidian-kanban",
   "isDesktopOnly": false,
-  "helpUrl": "https://github.com/komailo/obsidian-kanban"
+  "helpUrl": "https://github.com/wizlif/obsidian-kanban"
 }
