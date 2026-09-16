@@ -624,3 +624,17 @@
 }
 .kanban-mine-btn.is-active .kanban-mine-btn-dot { background: var(--color-orange); }
 .kanban-mine-btn.is-disabled { opacity: 0.55; }
+
+/* a work item that matched the "assigned to me" filter */
+.kanban-jira-wi.is-mine {
+  background: color-mix(in srgb, var(--color-orange) 12%, transparent);
+  box-shadow: inset 2px 0 0 var(--color-orange);
+}
+.kanban-jira-wi-mine-count {
+  margin-left: auto;
+  background: color-mix(in srgb, var(--color-orange) 22%, transparent);
+  color: var(--color-orange);
+  border-radius: 10px;
+  padding: 0 7px;
+  font-size: 0.92em;
+}

@@ -821,12 +821,23 @@ export class KanbanView extends TextFileView {
             const head = wrap.createDiv({ cls: 'kanban-jira-workitems-head' });
             head.createSpan({ cls: 'kanban-jira-wi-caret', text: '▾' });
             head.createSpan({ text: `Work items ${done}/${children.length}` });
+            if (this.assignedToMeOnly) {
+                const mineCount = children.filter(
+                    (c) => isAssignedTo(this.plugin.settings.myName, c, [])
+                ).length;
+                if (mineCount) {
+                    head.createSpan({ cls: 'kanban-jira-wi-mine-count', text: `${mineCount} mine` });
+                }
+            }
 
             const list = wrap.createDiv({ cls: 'kanban-jira-wi-list' });
             const draw = () => {
                 list.empty();
                 for (const c of children) {
-                    const row = list.createDiv({ cls: 'kanban-jira-wi' });
+                    const isMine = isAssignedTo(this.plugin.settings.myName, c, []);
+                    const row = list.createDiv({
+                        cls: `kanban-jira-wi${this.assignedToMeOnly && isMine ? ' is-mine' : ''}`,
+                    });
                     row.createSpan({ cls: 'kanban-wi-glyph', text: typeGlyph(c.type) });
                     row.createSpan({ cls: 'kanban-wi-key', text: c.id });
                     row.createSpan({ cls: 'kanban-wi-title', text: c.title });
