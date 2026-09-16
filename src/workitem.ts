@@ -98,3 +98,12 @@ export function typeGlyph(type: string): string {
     if (t === 'feature') return '◈';
     return '▢';
 }
+
+/** True when the item, or any of its work items, is assigned to `me`. */
+export function isAssignedTo(me: string, item: WorkItem | null, children: WorkItem[]): boolean {
+    const needle = me.trim().toLowerCase();
+    if (!needle) return false;
+    const matches = (w: WorkItem | null) =>
+        !!w && (w.assignee.toLowerCase() === needle || w.initials.toLowerCase() === needle);
+    return matches(item) || children.some(matches);
+}

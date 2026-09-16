@@ -40,8 +40,36 @@ check('first work item link', children[0] === '[[2629|GitHub Issues FE]]', child
 const second = parseCard(lane?.cards[1]?.content ?? '');
 check('card with no children', second.children.length === 0, second.children);
 
+
+// ---- "Assigned to me" filtering ----
+import { isAssignedTo, WorkItem } from '../src/workitem';
+
+function wi(over: Partial<WorkItem>): WorkItem {
+    return {
+        link: '1', file: null, id: '1', title: 't', type: 'Task', state: 'New',
+        epic: '', labels: [], assignee: '', initials: '', points: '',
+        sprint: '', area: '', parent: '', azure: '', ...over,
+    };
+}
+
+const me = wi({ assignee: 'Isaac Obella', initials: 'IO' });
+const other = wi({ assignee: 'Elizabeth Nakooli', initials: 'EN' });
+const none = wi({});
+
+check('story assigned to me matches', isAssignedTo('Isaac Obella', me, []));
+check('match is case-insensitive', isAssignedTo('isaac obella', me, []));
+check('initials also match', isAssignedTo('IO', me, []));
+check('story of someone else does not match', !isAssignedTo('Isaac Obella', other, []));
+check('unassigned story does not match', !isAssignedTo('Isaac Obella', none, []));
+check('my work item pulls in an unassigned story',
+    isAssignedTo('Isaac Obella', none, [other, me]));
+check("someone else's work items do not match",
+    !isAssignedTo('Isaac Obella', none, [other, none]));
+check('empty name never matches', !isAssignedTo('', me, [me]));
+check('blank name never matches', !isAssignedTo('   ', me, [me]));
+
 if (failures === 0) {
-    console.debug('\n  ALL OK');
+    console.debug('\n  ALL OK (incl. assignee filter)');
 } else {
     console.error(`\n  ${failures} FAILURE(S)`);
     throw new Error(`${failures} work item test failure(s)`);

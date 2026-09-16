@@ -594,3 +594,33 @@
 .kanban-detail-field-key { color: var(--text-muted); }
 .kanban-detail-field-value { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .kanban-detail-field-value.is-empty { color: var(--text-faint); font-style: italic; }
+
+/* ---- "Assigned to me" filter toggle ---- */
+.kanban-mine-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: 0.78em;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.kanban-mine-btn:hover { background: var(--background-modifier-hover); }
+.kanban-mine-btn-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--background-modifier-border);
+  flex: none;
+}
+.kanban-mine-btn.is-active {
+  background: color-mix(in srgb, var(--color-orange) 18%, transparent);
+  border-color: var(--color-orange);
+  color: var(--text-normal);
+}
+.kanban-mine-btn.is-active .kanban-mine-btn-dot { background: var(--color-orange); }
+.kanban-mine-btn.is-disabled { opacity: 0.55; }

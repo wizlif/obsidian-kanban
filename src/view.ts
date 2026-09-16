@@ -1,6 +1,6 @@
 import { TextFileView, WorkspaceLeaf, Menu, Modal, App, Setting, Notice, MarkdownRenderer, normalizePath, TFile, Component } from 'obsidian';
 import { WorkItemDetailModal, collectChildren } from './DetailModal';
-import { parseCard, resolveWorkItem, stateTone, typeGlyph } from './workitem';
+import { isAssignedTo, parseCard, resolveWorkItem, stateTone, typeGlyph } from './workitem';
 import { KanbanBoard, moveCard, updateCard, duplicateCard, KanbanLane, KanbanCard } from './types';
 import { MarkdownParser } from './parser';
 import KanbanPlugin from './main';
@@ -14,6 +14,8 @@ export class KanbanView extends TextFileView {
     editingLaneId: string | null = null;
     isEditingTitle: boolean = false;
     filterText: string = "";
+    assignedToMeOnly = false;
+    private mineCache = new Map<string, boolean>();
     placeholderEl: HTMLElement;
 
     constructor(leaf: WorkspaceLeaf, plugin: KanbanPlugin) {
@@ -90,6 +92,8 @@ export class KanbanView extends TextFileView {
     }
 
     render() {
+        // Frontmatter can change between renders; assignment is resolved fresh each time.
+        this.mineCache.clear();
         const container = this.contentEl;
         container.empty();
         container.addClass('kanban-board-container');
@@ -161,6 +165,26 @@ export class KanbanView extends TextFileView {
                 newSearchInput.focus();
                 newSearchInput.setSelectionRange(val.length, val.length);
             }
+        });
+
+        const myName = this.plugin.settings.myName;
+        const mineBtn = controlsWrapper.createDiv({
+            cls: `kanban-mine-btn${this.assignedToMeOnly ? ' is-active' : ''}${myName ? '' : ' is-disabled'}`,
+            attr: {
+                title: myName
+                    ? `Show only work assigned to ${myName}`
+                    : 'Set your name in the plugin settings to use this filter',
+            },
+        });
+        mineBtn.createSpan({ cls: 'kanban-mine-btn-dot' });
+        mineBtn.createSpan({ text: 'Assigned to me' });
+        mineBtn.addEventListener('click', () => {
+            if (!this.plugin.settings.myName) {
+                new Notice('Set your name in the plugin settings to filter by assignee.');
+                return;
+            }
+            this.assignedToMeOnly = !this.assignedToMeOnly;
+            this.render();
         });
 
         const archiveBtn = headerEl.createDiv({ cls: 'kanban-archive-btn', text: '📦', attr: { title: 'View archive' } });
@@ -367,6 +391,10 @@ export class KanbanView extends TextFileView {
         lane.cards.forEach((card, index) => {
             // Apply search filter
             if (this.filterText && !card.content.toLowerCase().includes(this.filterText)) {
+                return;
+            }
+
+            if (this.assignedToMeOnly && !this.isCardMine(card)) {
                 return;
             }
 
@@ -748,6 +776,24 @@ export class KanbanView extends TextFileView {
                 }
             });
         }
+    }
+
+    /** True when a card's story or any of its work items is assigned to the configured name. */
+    private isCardMine(card: KanbanCard): boolean {
+        const me = this.plugin.settings.myName;
+        if (!me) return true;
+
+        const cached = this.mineCache.get(card.id);
+        if (cached !== undefined) return cached;
+
+        const sourcePath = this.file?.path || "";
+        const parsed = parseCard(card.content);
+        const primary = resolveWorkItem(this.app, parsed.primary, sourcePath);
+        const children = collectChildren(this.app, parsed.children, sourcePath);
+        const mine = isAssignedTo(me, primary, children);
+
+        this.mineCache.set(card.id, mine);
+        return mine;
     }
 
     /** Jira-style card: title, epic chip, labels, work items, footer. */

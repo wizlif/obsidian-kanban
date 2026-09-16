@@ -21,6 +21,7 @@ export interface KanbanSettings {
 	appendArchiveDate: boolean;
 	archiveDateFormat: string;
 	archiveLinkedNotes: boolean;
+	myName: string;
 }
 
 export const DEFAULT_SETTINGS: KanbanSettings = {
@@ -43,6 +44,7 @@ export const DEFAULT_SETTINGS: KanbanSettings = {
 	newNoteTemplate: '',
 	showLinkedPageMetadata: false,
 	showAddCardInHeader: true,
+	myName: '',
 	appendArchiveDate: false,
 	archiveDateFormat: 'YYYY-MM-DD',
 	archiveLinkedNotes: false,
@@ -64,6 +66,18 @@ export class KanbanSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Board appearance')
 			.setHeading();
+
+		new Setting(containerEl)
+			.setName('My name')
+			.setDesc('Your name, used when filtering a board by assignee. Compared with the assignee field of a linked note, case-insensitively. Initials also match.')
+			.addText(text => text
+				// eslint-disable-next-line obsidianmd/ui/sentence-case -- example is a person's name
+				.setPlaceholder('Jane Doe')
+				.setValue(this.plugin.settings.myName)
+				.onChange(async (value) => {
+					this.plugin.settings.myName = value.trim();
+					await this.plugin.saveSettings();
+				}));
 
 		new Setting(containerEl)
 			.setName('Default lanes')
