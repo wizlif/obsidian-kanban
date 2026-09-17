@@ -851,7 +851,7 @@ export class KanbanView extends TextFileView {
                     });
                     row.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        void this.app.workspace.openLinkText(c.link, sourcePath, true);
+                        new WorkItemDetailModal(this.app, c, [], sourcePath, this).open();
                     });
                 }
             };

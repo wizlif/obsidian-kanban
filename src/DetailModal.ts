@@ -103,8 +103,9 @@ export class WorkItemDetailModal extends Modal {
                 attr: { 'aria-label': c.assignee || 'Unassigned' },
             });
             row.addEventListener('click', () => {
+                // Replace this modal with the child's, so drilling down stays in the popup.
                 this.close();
-                void this.app.workspace.openLinkText(c.link, this.sourcePath, true);
+                new WorkItemDetailModal(this.app, c, [], this.sourcePath, this.owner).open();
             });
         }
     }
